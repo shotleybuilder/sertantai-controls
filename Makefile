@@ -27,17 +27,8 @@ help:
 	@echo "Production:"
 	@echo "  make build          - Build production artifacts"
 
-# Check if infrastructure is running
-check-infrastructure:
-	@echo "Checking infrastructure services..."
-	@docker network inspect infrastructure_default > /dev/null 2>&1 || \
-		(echo "ERROR: Infrastructure network not found. Please start ~/Desktop/infrastructure first." && exit 1)
-	@docker ps | grep -q postgres || \
-		(echo "ERROR: PostgreSQL not running. Please start ~/Desktop/infrastructure first." && exit 1)
-	@echo "Infrastructure services are running."
-
 # Install dependencies
-setup: check-infrastructure
+setup:
 	@echo "Installing frontend dependencies..."
 	cd frontend && npm install
 	@echo "Installing backend dependencies..."
@@ -45,14 +36,22 @@ setup: check-infrastructure
 	@echo "Setup complete!"
 
 # Start development environment
-dev: check-infrastructure
+dev:
 	@echo "Starting development services..."
+	@echo "  - PostgreSQL (local)"
+	@echo "  - ElectricSQL"
+	@echo "  - Auth Proxy"
+	@echo "  - Backend (Phoenix)"
+	@echo "  - Frontend (Vite)"
+	@echo ""
 	docker-compose -f docker-compose.dev.yml up -d
 	@echo ""
 	@echo "Services started!"
+	@echo "  PostgreSQL:  localhost:5432"
 	@echo "  Frontend:    http://localhost:5173"
 	@echo "  Backend API: http://localhost:4000"
 	@echo "  Auth Proxy:  http://localhost:3000"
+	@echo "  Electric:    http://localhost:5133"
 	@echo ""
 	@echo "View logs: docker-compose -f docker-compose.dev.yml logs -f"
 

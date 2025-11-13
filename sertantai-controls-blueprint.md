@@ -349,34 +349,34 @@ mix test --only integration # Integration tests only
 
 ### Development Environment
 
-#### Infrastructure Dependencies
+#### Local Services (No Infrastructure Dependency)
 
-This project deploys into the **~/Desktop/infrastructure** environment which provides:
-- **PostgreSQL 15**: Unified database service with ElectricSQL extensions
-- **Common Docker networking**: Shared network configuration
-- **Base docker-compose configs**: Reusable service definitions
+**Note**: Development runs entirely locally with Docker Compose. The `~/Desktop/infrastructure` project is **production-only** and not required for local development.
 
-#### Project Docker Compose Services
+#### Docker Compose Services
 
-**docker-compose.dev.yml** (project-specific services only):
-- **electric**: ElectricSQL sync service (connects to infrastructure postgres)
-- **proxy**: Authorizing proxy for Electric (Caddy or custom)
+**docker-compose.dev.yml** (all services self-contained):
+- **postgres**: Local PostgreSQL 15 with logical replication enabled
+- **electric**: ElectricSQL sync service (connects to local postgres)
+- **proxy**: Authorizing proxy for Electric
 - **backend**: Phoenix application (includes gatekeeper)
 - **frontend**: Vite dev server with HMR
 
 #### Service Configuration
 
 ```yaml
-# PostgreSQL (provided by infrastructure project)
-Host: postgres (from infrastructure network)
-Port: 5432
+# PostgreSQL (local development container)
+Host: localhost (postgres within Docker network)
+Port: 5432 (exposed to host)
 Database: sertantai_controls_dev
 User: postgres
-Electric logical replication enabled
+Password: postgres (dev only)
+Logical replication: enabled (wal_level=logical)
+Volume: postgres_data (persisted)
 
 # ElectricSQL
 Port: 5133 (HTTP), 5433 (Postgres proxy)
-Connected to infrastructure postgres via docker network
+Connected to local postgres container
 Not directly accessible (behind auth proxy)
 
 # Authorizing Proxy
@@ -391,7 +391,7 @@ Environment: development
 Hot reload enabled
 CORS enabled via Plug.Cors (allows frontend :5173)
 Provides gatekeeper endpoints at /api/gatekeeper/:table
-Connects to infrastructure postgres
+Connects to local postgres container
 
 # Frontend (Vite)
 Port: 5173
@@ -406,12 +406,32 @@ API requests to backend :4000 (CORS-enabled)
 version: '3.8'
 
 networks:
-  # Connect to infrastructure project's network
-  infrastructure:
-    external: true
-    name: infrastructure_default
+  sertantai_network:
+    driver: bridge
 
 services:
+  # PostgreSQL database (local development)
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: sertantai_controls_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - sertantai_network
+    command:
+      - "postgres"
+      - "-c"
+      - "wal_level=logical"
+      - "-c"
+      - "max_replication_slots=10"
+      - "-c"
+      - "max_wal_senders=10"
+
   # ElectricSQL sync service
   electric:
     image: electricsql/electric:latest
@@ -423,9 +443,10 @@ services:
       - "5133:5133"
       - "5433:5433"
     networks:
-      - infrastructure
+      - sertantai_network
     depends_on:
-      - postgres  # From infrastructure project
+      postgres:
+        condition: service_healthy
 
   # Authorizing proxy for Electric
   proxy:
@@ -437,7 +458,7 @@ services:
     ports:
       - "3000:3000"
     networks:
-      - infrastructure
+      - sertantai_network
     depends_on:
       - electric
 
@@ -457,10 +478,12 @@ services:
       - backend_build:/app/_build
       - backend_deps:/app/deps
     networks:
-      - infrastructure
+      - sertantai_network
     depends_on:
-      - postgres  # From infrastructure project
-      - electric
+      postgres:
+        condition: service_healthy
+      electric:
+        condition: service_started
     command: mix phx.server
 
   # Vite dev server
@@ -475,10 +498,11 @@ services:
       - ./frontend:/app
       - frontend_node_modules:/app/node_modules
     networks:
-      - infrastructure
+      - sertantai_network
     command: npm run dev
 
 volumes:
+  postgres_data:
   backend_build:
   backend_deps:
   frontend_node_modules:
@@ -486,75 +510,73 @@ volumes:
 
 ### Production Environment
 
-#### Infrastructure Requirements
+#### Infrastructure Project (~/Desktop/infrastructure)
 
-**Backend/Services Hosting**:
-- **Option A**: Fly.io (Elixir-optimized, near-user deployments)
-- **Option B**: AWS ECS (Elastic Container Service)
-- **Option C**: DigitalOcean App Platform
+**Production deployment uses the shared infrastructure project** which provides:
+- **Shared PostgreSQL 16**: Multiple databases on single instance
+  - `ehs_enforcement_prod`
+  - `baserow`
+  - `n8n`
+  - `sertantai_controls_prod` (this project)
+- **Shared Redis 7**: Caching and sessions
+- **Nginx Reverse Proxy**: Subdomain routing with automatic SSL
+- **Centralized Management**: Single deployment, unified backups
 
-**Frontend Hosting** (Static Assets - Separate from Backend):
-- **Option A**: Cloudflare Pages (Recommended - Free, Open Source CLI)
+#### Backend Services (Added to Infrastructure)
+
+Backend services are added to `~/Desktop/infrastructure/docker/docker-compose.yml`:
+
+1. **Sertantai Controls Backend (Phoenix)**
+   - Service name: `sertantai-controls`
+   - Connects to shared `postgres` service
+   - Uses shared `redis` for caching
+   - Database: `sertantai_controls_prod`
+   - Nginx subdomain: `app.yourdomain.com` → `sertantai-controls:4000`
+   - Gatekeeper endpoints at `/api/gatekeeper/*`
+   - Health check: `/health`
+
+2. **ElectricSQL Service**
+   - Service name: `sertantai-controls-electric`
+   - Connects to shared `postgres` with logical replication
+   - Database: `sertantai_controls_prod`
+   - Not publicly accessible (internal network only)
+
+3. **Authorizing Proxy**
+   - Service name: `sertantai-controls-proxy`
+   - Validates JWT tokens
+   - Forwards to Electric after validation
+   - Can be deployed as part of infrastructure or to edge
+
+#### Frontend Deployment (Separate - CDN)
+
+**Hosting Options**:
+
+- **Option A: Cloudflare Pages** (Recommended - Free, Open Source CLI)
   - Free tier: Unlimited sites, bandwidth, requests
   - Global CDN with 300+ edge locations
   - Automatic SSL/TLS
   - Git integration for auto-deployment
   - Deploy with: `wrangler pages deploy`
 
-- **Option B**: Netlify (Free tier available)
+- **Option B: Netlify** (Free tier available)
   - 100GB bandwidth/month free
   - Global CDN
   - Automatic HTTPS
   - Git-based deployment
   - Open source CLI: `netlify deploy`
 
-- **Option C**: Vercel (Free for personal/hobby projects)
+- **Option C: Vercel** (Free for personal/hobby projects)
   - Global edge network
   - Automatic SSL
   - Git integration
   - Open source CLI: `vercel deploy`
 
-- **Option D**: Self-hosted with Caddy
-  - Open source web server
-  - Automatic HTTPS
-  - Host on any VPS (DigitalOcean, Hetzner, etc.)
-  - Full control, low cost
-
-#### Services
-
-1. **PostgreSQL Database**
-   - Managed PostgreSQL with replication
-   - Automated backups (daily, 7-day retention)
-   - Connection pooling (PgBouncer)
-
-2. **ElectricSQL Service**
-   - Deployed as separate service (not public-facing)
-   - Horizontal scaling capability
-   - Websocket load balancing
-
-3. **Authorizing Proxy**
-   - Edge deployment (Cloudflare Workers, Fly.io edge, or Vercel Edge)
-   - JWT validation with shape claim verification
-   - Low-latency token checking
-   - Routes to nearest Electric instance
-   - Fallback to Phoenix proxy if needed
-
-4. **Phoenix Backend**
-   - Multiple instances (min 2 for redundancy)
-   - Auto-scaling based on CPU/memory
-   - Hosts gatekeeper endpoints
-   - Health check endpoint: /health
-   - CORS configured for production frontend domain
-   - Can also serve as proxy fallback
-   - Does NOT serve frontend static assets
-
-5. **Frontend (Svelte/SvelteKit)**
-   - Built static assets deployed to CDN
-   - Separate deployment pipeline from backend
-   - Environment variables configured for production API/proxy URLs
-   - Global edge caching
-   - Automatic SSL/TLS certificates
-   - Sub-100ms response times globally
+**Deployment Configuration**:
+- Static build output from `frontend/build/`
+- Environment variables point to production backend
+- CORS must allow frontend domain
+- Independent deployment from backend
+- Atomic deployments with instant rollback
 
 #### Monitoring & Observability
 
@@ -1366,39 +1388,38 @@ end
 
 ### Prerequisites
 
-1. **Infrastructure Project**: Ensure `~/Desktop/infrastructure` is set up and running
-   - Provides PostgreSQL with ElectricSQL extensions
-   - Provides shared Docker network
-   - Must be started before this project
+1. Docker & Docker Compose
+2. Elixir 1.16+ and Erlang/OTP 26+
+3. Node.js 20+ and npm
+4. Make
+
+**Note**: All services run locally. The `~/Desktop/infrastructure` project is for **production only**.
 
 ### Getting Started
 
 ```bash
-# Step 1: Start infrastructure services (in separate terminal)
-cd ~/Desktop/infrastructure
-docker-compose up -d  # Starts postgres and shared services
-
-# Step 2: Clone and setup this project
+# Step 1: Clone repository
 git clone <repo-url>
 cd sertantai-controls
 
-# Step 3: Install dependencies
+# Step 2: Install dependencies
 make setup      # Install dependencies for frontend and backend
 
-# Step 4: Start project services
-make dev        # Start Electric, proxy, backend, and frontend
-                # Connects to infrastructure postgres automatically
+# Step 3: Start all services
+make dev        # Starts PostgreSQL, Electric, proxy, backend, and frontend
 
-# Step 5: Run migrations
+# Step 4: Run migrations
 make migrate
 
-# Step 6: Seed database
+# Step 5: Seed database (optional)
 make seed
 
 # Access the application
+# PostgreSQL: localhost:5432
 # Frontend: http://localhost:5173
 # Backend API: http://localhost:4000
 # Auth Proxy: http://localhost:3000
+# Electric: http://localhost:5133
 ```
 
 ### Makefile Commands
@@ -1594,14 +1615,14 @@ MIX_ENV=dev
    - [ ] Setup testing framework
 
 4. **DevOps Setup**:
-   - [ ] Verify infrastructure project setup (~/Desktop/infrastructure)
-   - [ ] Create Docker configurations (Electric, Proxy, Backend, Frontend)
-   - [ ] Setup docker-compose.dev.yml (connects to infrastructure network)
-   - [ ] Create Makefile with infrastructure dependency checks
+   - [ ] Create Docker configurations (PostgreSQL, Electric, Proxy, Backend, Frontend)
+   - [ ] Setup docker-compose.dev.yml (local development network)
+   - [ ] Create Makefile with development commands
    - [ ] Configure CI/CD pipelines (separate backend + frontend deployments)
    - [ ] Setup frontend deployment to Cloudflare Pages/Netlify
    - [ ] Configure CORS environment variables per environment
    - [ ] Setup pre-commit hooks
+   - [ ] Prepare production deployment configs for infrastructure project
 
 5. **Integration**:
    - [ ] Test full authentication flow (login → shape token → access)
@@ -1644,10 +1665,11 @@ MIX_ENV=dev
 ---
 
 **Last Updated**: 2025-11-13
-**Version**: 3.0
+**Version**: 4.0
 **Changes**:
 - v1.0: Initial blueprint
 - v2.0: Added TanStack DB clarification and Gatekeeper authentication
 - v3.0: Updated for infrastructure project integration, added CORS configuration, separated frontend deployment to CDN
+- v4.0: Clarified infrastructure is production-only; development uses local PostgreSQL in Docker Compose
 
 **Status**: Blueprint - Not Yet Implemented

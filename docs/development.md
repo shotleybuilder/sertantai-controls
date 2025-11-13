@@ -8,24 +8,34 @@ See the main [README.md](../README.md) for quick start instructions.
 
 ### Prerequisites
 
-1. Infrastructure project running (`~/Desktop/infrastructure`)
-2. Docker & Docker Compose
-3. Elixir 1.16+ and Erlang/OTP 26+
-4. Node.js 20+ and npm
-5. Make
+1. Docker & Docker Compose
+2. Elixir 1.16+ and Erlang/OTP 26+
+3. Node.js 20+ and npm
+4. Make
+
+**Note**: All services run locally in Docker. The `~/Desktop/infrastructure` project is for production deployment only, not required for development.
 
 ### Setup
 
 ```bash
-# Start infrastructure
-cd ~/Desktop/infrastructure
-docker-compose up -d
-
 # Setup project
 cd ~/Desktop/sertantai-controls
 make setup
+
+# Start all services (PostgreSQL, Electric, Proxy, Backend, Frontend)
 make dev
 ```
+
+### Local Services
+
+Running `make dev` starts:
+- **PostgreSQL 15**: Local database with logical replication enabled
+- **ElectricSQL**: Sync service connected to local PostgreSQL
+- **Auth Proxy**: JWT validation proxy
+- **Phoenix Backend**: API server with hot reload
+- **Vite Frontend**: Development server with HMR
+
+All services communicate on the `sertantai_network` Docker network.
 
 ## Coding Standards
 
@@ -151,17 +161,30 @@ config :logger, level: :debug
 
 ### PostgreSQL Connection Failed
 
-Ensure infrastructure is running:
+Ensure local PostgreSQL container is running:
 ```bash
-cd ~/Desktop/infrastructure
-docker-compose ps
+docker-compose -f docker-compose.dev.yml ps postgres
+docker-compose -f docker-compose.dev.yml logs postgres
+```
+
+Restart if needed:
+```bash
+docker-compose -f docker-compose.dev.yml restart postgres
 ```
 
 ### Port Already in Use
 
-Check and kill process:
+Check if port is in use:
 ```bash
-lsof -ti:4000 | xargs kill -9
+lsof -ti:5432  # PostgreSQL
+lsof -ti:4000  # Backend
+lsof -ti:5173  # Frontend
+lsof -ti:3000  # Proxy
+```
+
+Kill process or stop all services:
+```bash
+make stop
 ```
 
 ### Dependencies Out of Sync
@@ -172,6 +195,14 @@ cd frontend && rm -rf node_modules && npm install
 
 # Backend
 cd backend && rm -rf deps _build && mix deps.get
+```
+
+### Docker Volume Issues
+
+Clean up all volumes and restart:
+```bash
+make clean
+make dev
 ```
 
 ## Additional Resources

@@ -1,12 +1,40 @@
 version: '3.8'
 
 networks:
-  # Connect to infrastructure project's network
-  infrastructure:
-    external: true
-    name: infrastructure_default
+  sertantai_network:
+    driver: bridge
 
 services:
+  # PostgreSQL database (local development)
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: sertantai_controls_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql
+    networks:
+      - sertantai_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    # Enable logical replication for ElectricSQL
+    command:
+      - "postgres"
+      - "-c"
+      - "wal_level=logical"
+      - "-c"
+      - "max_replication_slots=10"
+      - "-c"
+      - "max_wal_senders=10"
+
   # ElectricSQL sync service
   electric:
     image: electricsql/electric:latest
@@ -18,7 +46,10 @@ services:
       - "5133:5133"
       - "5433:5433"
     networks:
-      - infrastructure
+      - sertantai_network
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
 
   # Authorizing proxy for Electric
@@ -31,7 +62,7 @@ services:
     ports:
       - "3000:3000"
     networks:
-      - infrastructure
+      - sertantai_network
     depends_on:
       - electric
     restart: unless-stopped
@@ -57,9 +88,12 @@ services:
       - backend_build:/app/_build
       - backend_deps:/app/deps
     networks:
-      - infrastructure
+      - sertantai_network
     depends_on:
-      - electric
+      postgres:
+        condition: service_healthy
+      electric:
+        condition: service_started
     restart: unless-stopped
     command: mix phx.server
 
@@ -79,11 +113,12 @@ services:
       - ./frontend:/app
       - frontend_node_modules:/app/node_modules
     networks:
-      - infrastructure
+      - sertantai_network
     restart: unless-stopped
     command: npm run dev
 
 volumes:
+  postgres_data:
   backend_build:
   backend_deps:
   frontend_node_modules:

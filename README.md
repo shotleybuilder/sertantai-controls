@@ -21,34 +21,28 @@ A modern, offline-first full-stack application built with Svelte, Phoenix, and E
 
 ## Prerequisites
 
-1. **Infrastructure Project**: `~/Desktop/infrastructure` must be running
-   - Provides PostgreSQL with ElectricSQL extensions
-   - Provides shared Docker network
+**Development Tools**:
+- Docker & Docker Compose
+- Elixir 1.16+ and Erlang/OTP 26+
+- Node.js 20+ and npm/pnpm
+- Make
 
-2. **Development Tools**:
-   - Docker & Docker Compose
-   - Elixir 1.16+ and Erlang/OTP 26+
-   - Node.js 20+ and npm/pnpm
-   - Make
+**Note**: In development, all services including PostgreSQL run locally via Docker Compose. The `~/Desktop/infrastructure` project is for **production deployment only**.
 
 ## Quick Start
 
 ```bash
-# 1. Start infrastructure services (in separate terminal)
-cd ~/Desktop/infrastructure
-docker-compose up -d
-
-# 2. Install dependencies
+# 1. Install dependencies
 cd ~/Desktop/sertantai-controls
 make setup
 
-# 3. Start development environment
+# 2. Start development environment (includes PostgreSQL, Electric, Proxy, Backend, Frontend)
 make dev
 
-# 4. Run migrations
+# 3. Run migrations
 make migrate
 
-# 5. Seed database (optional)
+# 4. Seed database (optional)
 make seed
 ```
 
@@ -184,17 +178,27 @@ make test
 
 ## Deployment
 
-### Backend (Fly.io / AWS / DigitalOcean)
-- Docker container deployment
-- Automatic migrations
-- Health checks
-- Auto-scaling
+### Production Infrastructure
 
-### Frontend (Cloudflare Pages / Netlify)
-- Static site generation
-- Global CDN
-- Automatic preview deployments
-- Independent deployment cycle
+This project deploys to the **~/Desktop/infrastructure** environment for production:
+
+- **Backend**: Deployed as Docker container to shared infrastructure
+  - Uses shared PostgreSQL instance (separate database: `sertantai_controls_prod`)
+  - Uses shared Redis for caching
+  - Routed via Nginx reverse proxy with subdomain (e.g., `app.yourdomain.com`)
+  - Automatic SSL via Let's Encrypt
+
+- **Frontend**: Deployed separately to CDN (Cloudflare Pages / Netlify)
+  - Static site generation
+  - Global edge caching
+  - Automatic preview deployments for PRs
+  - Points to production backend API
+
+### Deployment Process
+
+1. **Backend**: Add service to `~/Desktop/infrastructure/docker/docker-compose.yml`
+2. **Frontend**: Deploy via Wrangler/Netlify CLI to CDN
+3. **Database**: Migrations run automatically on backend startup
 
 See [docs/deployment.md](docs/deployment.md) for detailed instructions.
 
