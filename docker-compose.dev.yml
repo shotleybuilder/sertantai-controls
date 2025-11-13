@@ -1,0 +1,89 @@
+version: '3.8'
+
+networks:
+  # Connect to infrastructure project's network
+  infrastructure:
+    external: true
+    name: infrastructure_default
+
+services:
+  # ElectricSQL sync service
+  electric:
+    image: electricsql/electric:latest
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/sertantai_controls_dev
+      LOGICAL_PUBLISHER_HOST: postgres
+      LOGICAL_PUBLISHER_PORT: 5432
+    ports:
+      - "5133:5133"
+      - "5433:5433"
+    networks:
+      - infrastructure
+    restart: unless-stopped
+
+  # Authorizing proxy for Electric
+  proxy:
+    build: ./proxy
+    environment:
+      ELECTRIC_URL: http://electric:5133
+      JWT_SECRET: ${GUARDIAN_SECRET_KEY:-change-me-in-production}
+      JWT_ISSUER: sertantai_controls
+    ports:
+      - "3000:3000"
+    networks:
+      - infrastructure
+    depends_on:
+      - electric
+    restart: unless-stopped
+
+  # Phoenix backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/sertantai_controls_dev
+      FRONTEND_URL: http://localhost:5173
+      ELECTRIC_URL: http://electric:5133
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE:-dev-secret-key-base-min-64-chars-required-for-security}
+      GUARDIAN_SECRET_KEY: ${GUARDIAN_SECRET_KEY:-dev-guardian-secret}
+      GUARDIAN_ISSUER: sertantai_controls
+      MIX_ENV: dev
+      PORT: 4000
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./backend:/app
+      - backend_build:/app/_build
+      - backend_deps:/app/deps
+    networks:
+      - infrastructure
+    depends_on:
+      - electric
+    restart: unless-stopped
+    command: mix phx.server
+
+  # Vite dev server
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    environment:
+      PUBLIC_API_URL: http://localhost:4000
+      PUBLIC_ELECTRIC_PROXY_URL: http://localhost:3000
+      PUBLIC_ENV: development
+      PUBLIC_ENABLE_DEBUG: "true"
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    networks:
+      - infrastructure
+    restart: unless-stopped
+    command: npm run dev
+
+volumes:
+  backend_build:
+  backend_deps:
+  frontend_node_modules:

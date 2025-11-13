@@ -1,0 +1,29 @@
+FROM elixir:1.16-alpine
+
+# Install build dependencies
+RUN apk add --no-cache \
+    build-base \
+    git \
+    postgresql-client
+
+WORKDIR /app
+
+# Install hex and rebar
+RUN mix local.hex --force && \
+    mix local.rebar --force
+
+# Copy dependency files
+COPY mix.exs mix.lock ./
+RUN mix deps.get
+
+# Copy application code
+COPY . .
+
+# Compile dependencies
+RUN mix deps.compile
+
+# Expose Phoenix port
+EXPOSE 4000
+
+# Start Phoenix server
+CMD ["mix", "phx.server"]
