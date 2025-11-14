@@ -4,23 +4,28 @@ FROM elixir:1.16-alpine
 RUN apk add --no-cache \
     build-base \
     git \
-    postgresql-client
+    nodejs \
+    npm \
+    inotify-tools
 
+# Set working directory
 WORKDIR /app
 
 # Install hex and rebar
 RUN mix local.hex --force && \
     mix local.rebar --force
 
-# Copy dependency files
+# Copy mix files
 COPY mix.exs mix.lock ./
+
+# Install dependencies
 RUN mix deps.get
 
-# Copy application code
+# Copy the rest of the application
 COPY . .
 
-# Compile dependencies
-RUN mix deps.compile
+# Compile the project
+RUN mix compile
 
 # Expose Phoenix port
 EXPOSE 4000

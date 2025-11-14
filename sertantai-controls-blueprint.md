@@ -1,4 +1,4 @@
-# Sertantai-Controls Project Blueprint
+# Sertantai-Controls Project Blueprint v5.0
 
 ## Project Overview
 
@@ -7,6 +7,76 @@ A full-stack application consisting of:
 - **Backend**: Elixir + Phoenix + Ash Framework + ElectricSQL
 
 **Data Architecture**: TanStack DB provides local persistence and lightning-fast UI through differential dataflow, enabling sub-millisecond queries across normalized collections. ElectricSQL handles real-time sync between the local TanStack DB store and the PostgreSQL backend, creating a truly offline-first, reactive application.
+
+## Multi-App Architecture (v5.0 UPDATE)
+
+**IMPORTANT ARCHITECTURAL DECISION**: This application is part of a multi-app ecosystem with **centralized authentication**.
+
+### Ecosystem Structure
+
+```
+sertantai-auth (auth.yourdomain.com)
+  ├─ Owns: users, organizations, sessions tables
+  ├─ Handles: login, registration, password reset, OAuth
+  ├─ Issues: JWTs with org_id, user_id, roles claims
+  └─ Database: Primary source of truth for auth data
+
+sertantai-controls (controls.yourdomain.com)
+  ├─ Syncs: users, organizations tables via ElectricSQL (read-only)
+  ├─ Validates: JWTs from sertantai-auth
+  ├─ Owns: domain-specific tables (equipment, sensors, etc.)
+  └─ Database: Shared Postgres with sertantai-auth
+
+sertantai-[app2], sertantai-[app3], etc.
+  └─ Same pattern as controls
+```
+
+### Shared Database Strategy
+
+All apps connect to the **same PostgreSQL instance** but:
+- **sertantai-auth** has write access to `users`, `organizations`, `sessions`
+- **Other apps** have read-only access to auth tables (via Electric sync)
+- **Each app** owns its domain-specific tables
+
+### ElectricSQL Sync Pattern
+
+```elixir
+# In sertantai-controls backend
+# User/Org data synced from sertantai-auth (read-only)
+defmodule SertantaiControls.Auth.User do
+  use Ash.Resource,
+    data_layer: AshPostgres.DataLayer,
+    extensions: [AshGraphql, AshJsonApi]
+
+  postgres do
+    table "users"  # Owned by sertantai-auth
+    repo SertantaiControls.Repo
+  end
+
+  # Read-only resource - no create/update/destroy actions
+  actions do
+    read :read
+    read :by_id
+  end
+end
+```
+
+### JWT Validation Flow
+
+1. User logs in via `sertantai-auth` → receives JWT
+2. User accesses `sertantai-controls` with JWT in header
+3. Backend validates JWT signature and claims
+4. Frontend syncs user/org data from local Electric cache
+5. All operations scoped to `org_id` from JWT
+
+### Benefits of This Architecture
+
+- ✅ **Single Sign-On**: One login works across all apps
+- ✅ **Fast Local Access**: User data cached locally via Electric
+- ✅ **Independent Deployment**: Each app deploys separately
+- ✅ **Centralized User Management**: One place to manage users/orgs
+- ✅ **Multi-tenancy**: Organization-level data isolation built-in
+- ✅ **Offline-First**: Auth data synced and available offline
 
 ## Directory Structure
 
@@ -940,57 +1010,176 @@ electric.on('connected', () => {
 - Offline → online transition
 - Performance benchmarks (query speed)
 
-## Authentication: Gatekeeper Pattern
+## Authentication: Multi-App with Centralized Auth (v5.0 UPDATE)
 
 ### Overview
 
-The gatekeeper pattern provides shape-scoped authorization for ElectricSQL sync. Rather than authorizing every request, clients obtain a JWT token that encodes exactly which data shapes they're authorized to access. This moves authorization logic off the "hot path" and enables efficient edge deployment.
+**Authentication is handled by `sertantai-auth`**, not this app. This app:
+1. **Validates** JWTs issued by `sertantai-auth`
+2. **Syncs** user/org data from shared database (read-only via Electric)
+3. **Uses** JWT claims (`org_id`, `user_id`, `roles`) for authorization
+4. **Generates** shape-scoped tokens for ElectricSQL after JWT validation
 
-### Authentication Flow
+### Multi-App Authentication Flow
 
 ```
-┌─────────┐                                  ┌──────────────┐
-│ Client  │                                  │   Backend    │
-│         │                                  │  Gatekeeper  │
-└────┬────┘                                  └──────┬───────┘
-     │                                               │
-     │ 1. Login with credentials                    │
-     │ ──────────────────────────────────────────> │
-     │                                               │
-     │                      2. Validate credentials │
-     │                      3. Check permissions    │
-     │                      4. Generate JWT with    │
-     │                         shape claims         │
-     │                                               │
-     │ 5. Return JWT + shape definition             │
-     │ <────────────────────────────────────────── │
-     │                                               │
+┌─────────┐         ┌──────────────┐         ┌──────────────┐
+│ Client  │         │ sertantai-   │         │ sertantai-   │
+│         │         │    auth      │         │  controls    │
+└────┬────┘         └──────┬───────┘         └──────┬───────┘
+     │                     │                         │
+     │ 1. Login            │                         │
+     │ ─────────────────> │                         │
+     │                     │                         │
+     │ 2. JWT (org_id,     │                         │
+     │    user_id, roles)  │                         │
+     │ <───────────────── │                         │
+     │                     │                         │
+     │ 3. Request with JWT │                         │
+     │ ────────────────────────────────────────────>│
+     │                     │                         │
+     │                     │ 4. Validate JWT         │
+     │                     │    (shared secret)      │
+     │                     │ 5. Read user/org from   │
+     │                     │    Electric cache       │
+     │                     │ 6. Check permissions    │
+     │                     │                         │
+     │ 7. Generate shape token │                     │
+     │    (for Electric sync)  │                     │
+     │ <───────────────────────────────────────────│
+     │                     │                         │
      │                                        ┌──────────────┐
      │                                        │ Auth Proxy   │
      │                                        └──────┬───────┘
      │                                               │
-     │ 6. Request shape with JWT                    │
+     │ 8. Request shape with shape token            │
      │ ──────────────────────────────────────────> │
      │                                               │
-     │                      7. Validate JWT         │
-     │                      8. Verify shape matches │
-     │                         token claims         │
+     │                      9. Validate shape token │
+     │                     10. Verify org_id filter │
      │                                               │
      │                                        ┌──────────────┐
      │                                        │  ElectricSQL │
      │                                        └──────┬───────┘
      │                                               │
-     │                      9. Forward if authorized│
+     │                     11. Forward if authorized│
      │                      ─────────────────────> │
      │                                               │
-     │ 10. Stream shape data                        │
+     │ 12. Stream shape data (org-scoped)           │
      │ <──────────────────────────────────────────────────── │
-     │                                               │
+     │                     │                         │
+```
+
+### Configuration Requirements
+
+#### Shared JWT Secret
+
+All apps must use the same JWT secret to validate tokens from `sertantai-auth`:
+
+```elixir
+# config/runtime.exs (both sertantai-auth and sertantai-controls)
+config :joken, default_signer: System.get_env("SHARED_JWT_SECRET")
+```
+
+#### Database Connection
+
+```elixir
+# config/dev.exs
+config :sertantai_controls, SertantaiControls.Repo,
+  database: System.get_env("DATABASE_URL"),
+  # Same database as sertantai-auth!
+  pool_size: 10
 ```
 
 ### Backend Implementation (Phoenix/Ash)
 
-#### 1. Gatekeeper Endpoints
+#### 1. JWT Validation Plug
+
+```elixir
+# lib/sertantai_controls_web/plugs/auth_plug.ex
+defmodule SertantaiControlsWeb.AuthPlug do
+  import Plug.Conn
+
+  def init(opts), do: opts
+
+  def call(conn, _opts) do
+    case get_req_header(conn, "authorization") do
+      ["Bearer " <> token] ->
+        case validate_token(token) do
+          {:ok, claims} ->
+            conn
+            |> assign(:current_user_id, claims["user_id"])
+            |> assign(:current_org_id, claims["org_id"])
+            |> assign(:user_roles, claims["roles"])
+
+          {:error, _reason} ->
+            conn
+            |> put_status(:unauthorized)
+            |> Phoenix.Controller.json(%{error: "Invalid token"})
+            |> halt()
+        end
+
+      _ ->
+        conn
+        |> put_status(:unauthorized)
+        |> Phoenix.Controller.json(%{error: "Missing authorization header"})
+        |> halt()
+    end
+  end
+
+  defp validate_token(token) do
+    # Validates JWT from sertantai-auth using shared secret
+    Joken.verify(token, Joken.Signer.parse_config(:default_signer))
+  end
+end
+```
+
+#### 2. Read-Only Auth Resources
+
+```elixir
+# lib/sertantai_controls/auth/user.ex
+defmodule SertantaiControls.Auth.User do
+  use Ash.Resource,
+    data_layer: AshPostgres.DataLayer,
+    extensions: [AshJsonApi]
+
+  postgres do
+    table "users"  # Owned by sertantai-auth
+    repo SertantaiControls.Repo
+  end
+
+  # READ-ONLY: No create/update/destroy actions
+  actions do
+    defaults [:read]
+
+    read :by_id do
+      get? true
+      argument :id, :uuid, allow_nil?: false
+      filter expr(id == ^arg(:id))
+    end
+
+    read :by_org do
+      argument :org_id, :uuid, allow_nil?: false
+      filter expr(organization_id == ^arg(:org_id))
+    end
+  end
+
+  attributes do
+    uuid_primary_key :id
+    attribute :email, :string, allow_nil?: false
+    attribute :name, :string
+    attribute :organization_id, :uuid, allow_nil?: false
+
+    timestamps()
+  end
+
+  relationships do
+    belongs_to :organization, SertantaiControls.Auth.Organization
+  end
+end
+```
+
+#### 3. Shape Token Generation (Gatekeeper Endpoints)
 
 ```elixir
 # lib/sertantai_controls_web/controllers/gatekeeper_controller.ex
@@ -1665,11 +1854,17 @@ MIX_ENV=dev
 ---
 
 **Last Updated**: 2025-11-13
-**Version**: 4.0
+**Version**: 5.0
 **Changes**:
 - v1.0: Initial blueprint
 - v2.0: Added TanStack DB clarification and Gatekeeper authentication
 - v3.0: Updated for infrastructure project integration, added CORS configuration, separated frontend deployment to CDN
 - v4.0: Clarified infrastructure is production-only; development uses local PostgreSQL in Docker Compose
+- **v5.0: MAJOR ARCHITECTURAL CHANGE - Centralized authentication via sertantai-auth app**
+  - Authentication now handled by separate `sertantai-auth` service
+  - This app validates JWTs and syncs user/org data via ElectricSQL (read-only)
+  - Shared database strategy across all sertantai-* apps
+  - Updated auth flow, JWT validation, and resource patterns
+  - Removed user/org/session management from this app's responsibilities
 
-**Status**: Blueprint - Not Yet Implemented
+**Status**: Foundation Implemented (Hello World + Electric + Proxy working), Schema Development in Progress

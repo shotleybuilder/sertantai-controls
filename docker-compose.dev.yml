@@ -13,7 +13,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: sertantai_controls_dev
     ports:
-      - "5432:5432"
+      - "5435:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql
@@ -35,16 +35,16 @@ services:
       - "-c"
       - "max_wal_senders=10"
 
-  # ElectricSQL sync service
+  # ElectricSQL sync service (v1.0 - new HTTP Shape API)
   electric:
     image: electricsql/electric:latest
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/sertantai_controls_dev
-      LOGICAL_PUBLISHER_HOST: postgres
-      LOGICAL_PUBLISHER_PORT: 5432
+      HTTP_PORT: 3000
+      ELECTRIC_INSECURE: "true"  # Development only! Use ELECTRIC_SECRET in production
+      PG_PROXY_PASSWORD: proxy_password  # Secure in production!
     ports:
-      - "5133:5133"
-      - "5433:5433"
+      - "3000:3000"  # HTTP API for Shape-based sync
     networks:
       - sertantai_network
     depends_on:
@@ -52,20 +52,9 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # Authorizing proxy for Electric
-  proxy:
-    build: ./proxy
-    environment:
-      ELECTRIC_URL: http://electric:5133
-      JWT_SECRET: ${GUARDIAN_SECRET_KEY:-change-me-in-production}
-      JWT_ISSUER: sertantai_controls
-    ports:
-      - "3000:3000"
-    networks:
-      - sertantai_network
-    depends_on:
-      - electric
-    restart: unless-stopped
+  # Note: The new Electric has built-in HTTP API, no separate proxy needed
+  # Auth/authorization should be handled by your backend API
+  # Electric Shapes can be filtered by organization_id for multi-tenancy
 
   # Phoenix backend
   backend:
@@ -73,7 +62,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile.dev
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/sertantai_controls_dev
+      SERTANTAI_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/sertantai_controls_dev
       FRONTEND_URL: http://localhost:5173
       ELECTRIC_URL: http://electric:5133
       SECRET_KEY_BASE: ${SECRET_KEY_BASE:-dev-secret-key-base-min-64-chars-required-for-security}
@@ -104,7 +93,7 @@ services:
       dockerfile: Dockerfile.dev
     environment:
       PUBLIC_API_URL: http://localhost:4000
-      PUBLIC_ELECTRIC_PROXY_URL: http://localhost:3000
+      PUBLIC_ELECTRIC_URL: http://localhost:3000  # New Electric HTTP API
       PUBLIC_ENV: development
       PUBLIC_ENABLE_DEBUG: "true"
     ports:

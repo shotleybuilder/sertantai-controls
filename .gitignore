@@ -33,3 +33,14 @@ coverage/
 
 # Docker volumes
 volumes/
+
+# Elixir
+*.beam
+*.ez
+erl_crash.dump
+*.plt
+*.plt.hash
+priv/plts/
+
+# Elixir releases
+rel/

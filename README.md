@@ -1,23 +1,30 @@
 # Sertantai Controls
 
-A modern, offline-first full-stack application built with Svelte, Phoenix, and ElectricSQL.
+Real-time risk control management system using a novel 2x2 classification model based on time-since-last-touch and provider distance.
 
-## Architecture
+## Overview
 
-- **Frontend**: SvelteKit + TanStack DB + ElectricSQL client
-- **Backend**: Elixir + Phoenix + Ash Framework + ElectricSQL
-- **Database**: PostgreSQL (provided by infrastructure project)
-- **Sync**: ElectricSQL with gatekeeper authentication
-- **Deployment**: Backend on Fly.io/AWS, Frontend on Cloudflare Pages
+Sertantai Controls implements an innovative approach to industrial risk control management by dynamically classifying controls into four quadrants:
 
-## Key Features
+- **Self** (Recent × Close): Controls touched recently by nearby providers
+- **Specialist** (Distant × Close): Controls needing specialist attention from nearby providers
+- **Service** (Recent × Remote): Recently serviced controls from remote providers
+- **Strange** (Distant × Remote): High-risk controls - distant in time and provider network
 
-- **Offline-First**: Full functionality without network connection via TanStack DB
-- **Real-Time Sync**: ElectricSQL provides bidirectional sync with PostgreSQL
-- **Sub-Millisecond Queries**: Differential dataflow powered by TanStack DB
-- **Optimistic Updates**: Instant UI feedback with automatic rollback
-- **Shape-Based Auth**: JWT tokens scoped to specific data shapes
-- **Multi-Tenant**: Built-in organization-level data isolation
+Controls automatically move between quadrants based on:
+1. **Time since last touched** - How long since the last interaction
+2. **Provider distance** - Graph-based distance in the provider network
+
+This enables predictive maintenance and proactive risk management.
+
+## Tech Stack
+
+- **Frontend**: SvelteKit + TypeScript + TanStack DB + ElectricSQL v1.0
+- **Backend**: Elixir + Phoenix + Ash Framework 3.0
+- **Database**: PostgreSQL 15+ with logical replication
+- **Sync**: ElectricSQL HTTP Shape API
+- **Quality**: Credo, Dialyzer, ESLint, Prettier, Vitest
+- **CI/CD**: Git hooks + GitHub Actions
 
 ## Prerequisites
 
@@ -32,55 +39,81 @@ A modern, offline-first full-stack application built with Svelte, Phoenix, and E
 ## Quick Start
 
 ```bash
-# 1. Install dependencies
-cd ~/Desktop/sertantai-controls
-make setup
+# 1. Clone the repository
+git clone https://github.com/shotleybuilder/sertantai-controls.git
+cd sertantai-controls
 
-# 2. Start development environment (includes PostgreSQL, Electric, Proxy, Backend, Frontend)
-make dev
+# 2. Start all services with Docker Compose
+docker-compose -f docker-compose.dev.yml up
 
-# 3. Run migrations
-make migrate
-
-# 4. Seed database (optional)
-make seed
+# This starts: PostgreSQL, ElectricSQL, Phoenix backend, Vite dev server
 ```
 
 Access the application:
 - Frontend: http://localhost:5173
 - Backend API: http://localhost:4000
-- Auth Proxy: http://localhost:3000
+- ElectricSQL: http://localhost:3000
+- PostgreSQL: localhost:5435
+
+### Manual Setup (without Docker)
+
+**Backend:**
+```bash
+cd backend
+mix deps.get
+mix ash.setup              # Creates DB, runs migrations, seeds
+mix phx.server
+```
+
+**Frontend:**
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
 ## Project Structure
 
 ```
 sertantai-controls/
-├── frontend/              # SvelteKit application
-│   ├── src/
-│   │   ├── lib/
-│   │   │   ├── components/    # Svelte components
-│   │   │   ├── stores/        # Auth & UI state
-│   │   │   ├── db/            # TanStack DB collections & queries
-│   │   │   └── electric/      # ElectricSQL client & sync
-│   │   └── routes/            # SvelteKit routes
-│   └── tests/                 # Vitest & Playwright tests
-│
-├── backend/               # Phoenix + Ash application
+├── backend/                       # Phoenix + Ash backend
 │   ├── lib/
-│   │   ├── sertantai_controls/        # Business logic
-│   │   │   ├── resources/             # Ash resources
-│   │   │   ├── domains/               # Domain logic
-│   │   │   └── electric/              # Electric integration
-│   │   └── sertantai_controls_web/    # Web layer
-│   │       ├── controllers/           # REST endpoints
-│   │       │   ├── auth_controller.ex
-│   │       │   └── gatekeeper_controller.ex
-│   │       └── plugs/                 # Middleware
-│   └── test/                          # ExUnit tests
+│   │   ├── sertantai_controls/
+│   │   │   ├── auth/              # User & Organization (read-only)
+│   │   │   │   ├── user.ex
+│   │   │   │   └── organization.ex
+│   │   │   └── safety/            # Core domain resources
+│   │   │       ├── control.ex     # Main control resource
+│   │   │       ├── control_provider.ex
+│   │   │       ├── provider_network.ex
+│   │   │       ├── control_interaction.ex
+│   │   │       ├── quadrant_classification.ex
+│   │   │       ├── organizational_trace.ex
+│   │   │       └── competency_record.ex
+│   │   ├── api.ex                 # Ash Domain
+│   │   └── repo.ex
+│   ├── priv/
+│   │   └── repo/
+│   │       ├── migrations/        # Ash-generated migrations
+│   │       └── seeds.exs          # Synthetic data (9 controls, 5 providers)
+│   └── test/
 │
-├── proxy/                 # Authorizing proxy for Electric
-├── docs/                  # Project documentation
-└── database/              # Database migrations & seeds
+├── frontend/                      # SvelteKit frontend
+│   ├── src/
+│   │   ├── routes/                # SvelteKit routes
+│   │   ├── lib/                   # Shared utilities
+│   │   └── test/                  # Vitest tests
+│   ├── static/
+│   └── vitest.config.ts
+│
+├── .github/
+│   └── workflows/
+│       └── ci.yml                 # GitHub Actions CI/CD
+│
+├── docs/
+│   └── innovative_schema.md       # Schema design document
+│
+└── docker-compose.dev.yml         # Local development setup
 ```
 
 ## Development Workflow
