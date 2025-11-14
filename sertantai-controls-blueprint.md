@@ -1816,9 +1816,9 @@ MIX_ENV=dev
    - [x] Setup ExUnit testing framework
    - [x] Configure database connection
    - [x] Add Plug.Cors dependency and configure CORS
-   - [ ] Setup JWT validation for sertantai-auth tokens
+   - [ ] Setup JWT validation for sertantai-auth tokens (blocked: waiting for sertantai-auth updates)
    - [x] Setup ElectricSQL v1.0 integration (Docker Compose configured, not running yet)
-   - [ ] Create health check endpoint
+   - [x] Create health check endpoint (basic + detailed with database checks)
 
 3. **Frontend Bootstrap** (In Progress):
    - [x] Initialize SvelteKit project (minimal template)

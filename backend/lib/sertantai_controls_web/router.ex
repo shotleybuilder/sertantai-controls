@@ -5,10 +5,11 @@ defmodule SertantaiControlsWeb.Router do
     plug :accepts, ["json"]
   end
 
-  # Health check endpoint (no /api prefix)
+  # Health check endpoints (no /api prefix, no authentication required)
   scope "/", SertantaiControlsWeb do
     pipe_through :api
     get "/health", HealthController, :index
+    get "/health/detailed", HealthController, :show
   end
 
   # API endpoints
