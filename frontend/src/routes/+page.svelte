@@ -33,110 +33,87 @@
 	});
 </script>
 
-<main>
-	<h1>Sertantai Controls</h1>
+<main class="min-h-screen flex items-center justify-center p-8">
+	<div class="max-w-2xl w-full space-y-6">
+		<!-- Header -->
+		<div class="text-center">
+			<h1 class="text-4xl font-bold text-gray-900 mb-2">Sertantai Controls</h1>
+			<p class="text-gray-600">Risk Control Management System</p>
+		</div>
 
-	<div class="card">
-		<h2>Backend API Test</h2>
+		<!-- Backend API Test Card -->
+		<div class="bg-white rounded-lg shadow-lg p-8">
+			<h2 class="text-2xl font-semibold text-gray-800 mb-6">Backend API Test</h2>
 
-		{#if loading}
-			<p class="loading">Loading...</p>
-		{:else if status === 'success'}
-			<p class="success">{message}</p>
-		{:else if error}
-			<p class="error">Error: {error}</p>
-		{/if}
+			<div class="min-h-[80px] flex items-center justify-center">
+				{#if loading}
+					<div class="flex items-center space-x-2">
+						<div class="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+						<p class="text-gray-600 italic">Loading...</p>
+					</div>
+				{:else if status === 'success'}
+					<div class="text-center">
+						<svg
+							class="w-12 h-12 text-green-500 mx-auto mb-2"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+							/>
+						</svg>
+						<p class="text-green-600 font-semibold text-lg">{message}</p>
+					</div>
+				{:else if error}
+					<div class="text-center">
+						<svg
+							class="w-12 h-12 text-red-500 mx-auto mb-2"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
+							/>
+						</svg>
+						<p class="text-red-600 font-semibold">Error: {error}</p>
+					</div>
+				{/if}
+			</div>
 
-		<button on:click={fetchHello} disabled={loading}> Refresh </button>
-	</div>
+			<div class="mt-6 text-center">
+				<button
+					on:click={fetchHello}
+					disabled={loading}
+					class="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg
+                       hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
+                       disabled:bg-gray-300 disabled:cursor-not-allowed
+                       transition-colors duration-200"
+				>
+					{loading ? 'Loading...' : 'Refresh'}
+				</button>
+			</div>
+		</div>
 
-	<div class="info">
-		<p>API URL: <code>{API_URL}</code></p>
+		<!-- API Info Card -->
+		<div class="bg-gray-100 rounded-lg p-4">
+			<p class="text-sm text-gray-700">
+				API URL: <code class="bg-gray-200 px-2 py-1 rounded text-gray-900 font-mono text-xs"
+					>{API_URL}</code
+				>
+			</p>
+		</div>
+
+		<!-- Tech Stack Badge -->
+		<div class="text-center text-sm text-gray-500">
+			<p>SvelteKit + TypeScript + TailwindCSS + Phoenix + Ash Framework</p>
+		</div>
 	</div>
 </main>
-
-<style>
-	main {
-		text-align: center;
-		padding: 2rem;
-		max-width: 800px;
-		margin: 0 auto;
-		font-family:
-			-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans',
-			'Helvetica Neue', sans-serif;
-	}
-
-	h1 {
-		color: #333;
-		font-size: 2.5rem;
-		margin-bottom: 2rem;
-	}
-
-	h2 {
-		color: #555;
-		font-size: 1.5rem;
-		margin-bottom: 1rem;
-	}
-
-	.card {
-		background: white;
-		border-radius: 8px;
-		padding: 2rem;
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-		margin-bottom: 1rem;
-	}
-
-	.loading {
-		color: #666;
-		font-style: italic;
-	}
-
-	.success {
-		color: #28a745;
-		font-weight: 600;
-	}
-
-	.error {
-		color: #dc3545;
-		font-weight: 600;
-	}
-
-	button {
-		background: #007bff;
-		color: white;
-		border: none;
-		padding: 0.75rem 1.5rem;
-		font-size: 1rem;
-		border-radius: 4px;
-		cursor: pointer;
-		margin-top: 1rem;
-	}
-
-	button:hover:not(:disabled) {
-		background: #0056b3;
-	}
-
-	button:disabled {
-		background: #ccc;
-		cursor: not-allowed;
-	}
-
-	.info {
-		margin-top: 2rem;
-		padding: 1rem;
-		background: #f8f9fa;
-		border-radius: 4px;
-	}
-
-	code {
-		background: #e9ecef;
-		padding: 0.2rem 0.4rem;
-		border-radius: 3px;
-		font-family: 'Courier New', monospace;
-	}
-
-	:global(body) {
-		margin: 0;
-		background: #f5f5f5;
-	}
-</style>

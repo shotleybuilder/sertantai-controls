@@ -1,12 +1,18 @@
-# Sertantai-Controls Project Blueprint v5.0
+# Sertantai-Controls Project Blueprint v6.0
+
+**Completion Status**: ✅ Initial Commit Complete - CI/CD & Quality Tools Configured (15% implemented)
 
 ## Project Overview
 
-A full-stack application consisting of:
-- **Frontend**: Svelte + TanStack DB + ElectricSQL client
-- **Backend**: Elixir + Phoenix + Ash Framework + ElectricSQL
+Real-time risk control management system using a novel **2x2 classification model** based on time-since-last-touch and provider distance.
 
-**Data Architecture**: TanStack DB provides local persistence and lightning-fast UI through differential dataflow, enabling sub-millisecond queries across normalized collections. ElectricSQL handles real-time sync between the local TanStack DB store and the PostgreSQL backend, creating a truly offline-first, reactive application.
+A full-stack application consisting of:
+- **Frontend**: SvelteKit + TypeScript + TanStack DB + ElectricSQL v1.0 HTTP Shape API
+- **Backend**: Elixir + Phoenix + Ash Framework 3.0 with 8 domain resources
+- **Database**: PostgreSQL 15+ with comprehensive seed data
+- **CI/CD**: Git hooks (pre-commit/pre-push) + GitHub Actions
+
+**Data Architecture**: TanStack DB provides local persistence and lightning-fast UI through differential dataflow, enabling sub-millisecond queries across normalized collections. ElectricSQL v1.0 handles real-time sync using the new HTTP Shape API with built-in authentication, creating a truly offline-first, reactive application.
 
 ## Multi-App Architecture (v5.0 UPDATE)
 
@@ -132,10 +138,11 @@ sertantai-controls/
 │
 ├── backend/
 │   ├── .gitignore
-│   ├── mix.exs
+│   ├── mix.exs (✅ with Credo, Dialyzer, mix_audit)
 │   ├── mix.lock
 │   ├── .formatter.exs
-│   ├── .credo.exs
+│   ├── .credo.exs (✅ configured)
+│   ├── .dialyzer_ignore.exs
 │   ├── .env.example
 │   ├── Dockerfile
 │   ├── .dockerignore
@@ -147,32 +154,36 @@ sertantai-controls/
 │   │   └── runtime.exs
 │   ├── lib/
 │   │   ├── sertantai_controls/
+│   │   │   ├── api.ex (Ash.Domain)
 │   │   │   ├── application.ex
 │   │   │   ├── repo.ex
-│   │   │   ├── resources/
-│   │   │   ├── domains/
+│   │   │   ├── auth/ (User, Organization - read-only resources)
+│   │   │   ├── safety/ (Control, ControlProvider, etc. - domain resources)
 │   │   │   └── electric/
 │   │   │       └── sync.ex
 │   │   └── sertantai_controls_web/
 │   │       ├── endpoint.ex
 │   │       ├── router.ex
 │   │       ├── controllers/
-│   │       │   ├── auth_controller.ex
-│   │       │   └── gatekeeper_controller.ex
-│   │       ├── plugs/
-│   │       │   ├── auth_plug.ex
-│   │       │   └── electric_proxy.ex
-│   │       ├── live/
-│   │       └── graphql/
+│   │       │   └── page_controller.ex
+│   │       ├── components/
+│   │       │   ├── core_components.ex
+│   │       │   └── layouts.ex
+│   │       └── gettext.ex
 │   ├── priv/
 │   │   ├── repo/
-│   │   │   ├── migrations/
-│   │   │   └── seeds.exs
-│   │   └── static/
+│   │   │   ├── migrations/ (✅ 8 resources migrated)
+│   │   │   └── seeds.exs (✅ comprehensive seed data)
+│   │   ├── plts/ (Dialyzer PLT files)
+│   │   ├── static/
+│   │   └── gettext/
 │   └── test/
 │       ├── sertantai_controls/
 │       ├── sertantai_controls_web/
 │       ├── support/
+│       │   ├── conn_case.ex
+│       │   ├── data_case.ex
+│       │   └── fixtures.ex
 │       └── test_helper.exs
 │
 ├── database/
@@ -258,43 +269,85 @@ coverage/
 volumes/
 ```
 
-## CI/CD Pipeline (GitHub Actions)
+## CI/CD Pipeline (Shift-Left Implementation) ✅
 
-### Frontend CI Pipeline (.github/workflows/frontend-ci.yml)
+### Git Hooks (Implemented)
 
-**Stages**:
-1. **Lint**: ESLint, Prettier, Svelte-check
-2. **Type Check**: TypeScript validation
-3. **Test**: Vitest unit tests with coverage
-4. **Build**: Vite production build
-5. **E2E Tests**: Playwright tests (on PR)
-6. **Security Scan**: npm audit, Snyk
-7. **Deploy Preview**: Deploy to staging environment (on PR)
+#### Pre-Commit Hook (.git/hooks/pre-commit) ✅
+**7 Quality Checks** run locally before commit:
 
-**Triggers**: Push to feature/*, develop, main; Pull requests
+**Backend Checks**:
+1. **Code Formatting**: `mix format --check-formatted` on staged Elixir files
+2. **Compilation**: `mix compile --force --warnings-as-errors`
+3. **Credo Static Analysis**: `mix credo --only design,consistency`
+4. **Ash Codegen Check**: `mix ash.codegen --check`
 
-### Backend CI Pipeline (.github/workflows/backend-ci.yml)
+**Frontend Checks**:
+5. **Prettier Formatting**: `npm run format:check` on staged files
+6. **ESLint**: `npm run lint` with browser/Node.js globals configured
+7. **TypeScript Check**: `npm run check` (svelte-check)
 
-**Stages**:
-1. **Compile**: Mix compile with warnings as errors
-2. **Format Check**: mix format --check-formatted
-3. **Lint**: Credo static analysis
-4. **Test**: ExUnit tests with coverage (min 80%)
-5. **Dialyzer**: Type checking
-6. **Security Scan**: mix deps.audit, Sobelow
-7. **Build Docker Image**: Build and tag image
+**Non-Blocking Items**: Credo AliasUsage warnings (low priority, exit_status 0)
 
-**Triggers**: Push to feature/*, develop, main; Pull requests
+**Override**: `git commit --no-verify` (use sparingly)
 
-### Integration Tests Pipeline (.github/workflows/integration-tests.yml)
+#### Pre-Push Hook (.git/hooks/pre-push) ✅
+**5 Expensive Checks** run before push to remote:
 
-**Stages**:
-1. **Spin Up Services**: Docker Compose (Postgres, Electric, Backend, Frontend)
-2. **Wait for Health Checks**
-3. **Run Integration Tests**: API + ElectricSQL sync tests
-4. **Tear Down Services**
+**Backend Checks**:
+1. **Dialyzer Type Checking**: `mix dialyzer --format github` (warnings non-blocking)
+2. **Security Audit**: `mix deps.audit` (blocking on vulnerabilities)
+3. **Unused Dependencies**: `mix deps.unlock --check-unused` (non-blocking warning)
+4. **Backend Test Suite**: `mix test --exclude integration`
 
-**Triggers**: Pull requests to develop/main
+**Frontend Checks**:
+5. **Frontend Test Suite**: `npm run test:run` (no-test-files non-blocking)
+
+**Non-Blocking Items**:
+- Dialyzer warnings (logged but don't fail)
+- Missing frontend test files (warning only)
+- Unused dependencies (warning only)
+
+**Override**: `git push --no-verify` (use sparingly)
+
+### GitHub Actions CI Pipeline (.github/workflows/ci.yml) ✅
+
+**3 Jobs** running in parallel:
+
+#### Job 1: backend-checks
+1. Setup Elixir (1.18.1) + Erlang (OTP 27.2)
+2. Cache deps and _build
+3. Install dependencies
+4. Check formatting
+5. Compile with warnings as errors
+6. Run Credo
+7. Check Ash codegen
+8. Run Dialyzer
+9. Security audit
+10. Check unused dependencies
+11. Run backend tests
+
+#### Job 2: frontend-checks
+1. Setup Node.js 20
+2. Cache node_modules
+3. Install dependencies
+4. Check formatting (Prettier)
+5. Run ESLint
+6. Type check (svelte-check)
+7. Run tests (Vitest)
+8. Build production bundle
+
+#### Job 3: integration-tests
+- **Depends on**: backend-checks, frontend-checks
+- Runs integration tests (currently placeholder)
+
+**Triggers**: Push to any branch, Pull requests
+
+**Future Enhancements**:
+- [ ] E2E tests with Playwright
+- [ ] Security scanning (npm audit, Sobelow)
+- [ ] Docker image build and push
+- [ ] Deploy preview environments
 
 ### Deployment Pipeline
 
@@ -376,14 +429,15 @@ volumes/
 - Visual regression tests
 - Performance benchmarks (query response times)
 
-#### Test Commands
+#### Test Commands ✅
 ```bash
-npm run test           # Run unit tests
-npm run test:watch     # Watch mode
+npm run test           # Run unit tests (Vitest watch mode)
+npm run test:ui        # Vitest UI mode
+npm run test:run       # Run once and exit
 npm run test:coverage  # Generate coverage report
-npm run test:e2e       # Run E2E tests
-npm run test:e2e:ui    # E2E with UI
 ```
+
+**Note**: E2E tests with Playwright not yet configured
 
 ### Backend Testing
 
@@ -427,10 +481,11 @@ mix test --only integration # Integration tests only
 
 **docker-compose.dev.yml** (all services self-contained):
 - **postgres**: Local PostgreSQL 15 with logical replication enabled
-- **electric**: ElectricSQL sync service (connects to local postgres)
-- **proxy**: Authorizing proxy for Electric
-- **backend**: Phoenix application (includes gatekeeper)
+- **electric**: ElectricSQL v1.0 sync service with built-in HTTP API
+- **backend**: Phoenix application
 - **frontend**: Vite dev server with HMR
+
+**Note**: ElectricSQL v1.0 has built-in authentication via HTTP headers, no separate proxy service needed.
 
 #### Service Configuration
 
@@ -444,23 +499,17 @@ Password: postgres (dev only)
 Logical replication: enabled (wal_level=logical)
 Volume: postgres_data (persisted)
 
-# ElectricSQL
-Port: 5133 (HTTP), 5433 (Postgres proxy)
+# ElectricSQL v1.0
+Port: 5133 (HTTP Shape API)
 Connected to local postgres container
-Not directly accessible (behind auth proxy)
-
-# Authorizing Proxy
-Port: 3000
-Validates JWT tokens
-Forwards authorized requests to Electric :5133
-Validates shape claims match requests
+Authentication via HTTP headers (Authorization: Bearer <token>)
+Endpoint: GET /v1/shape?table=<table>&where=<filter>
 
 # Backend (Phoenix)
 Port: 4000
 Environment: development
 Hot reload enabled
 CORS enabled via Plug.Cors (allows frontend :5173)
-Provides gatekeeper endpoints at /api/gatekeeper/:table
 Connects to local postgres container
 
 # Frontend (Vite)
@@ -502,35 +551,21 @@ services:
       - "-c"
       - "max_wal_senders=10"
 
-  # ElectricSQL sync service
+  # ElectricSQL v1.0 sync service (built-in auth)
   electric:
     image: electricsql/electric:latest
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/sertantai_controls_dev
       LOGICAL_PUBLISHER_HOST: postgres
       LOGICAL_PUBLISHER_PORT: 5432
+      AUTH_MODE: insecure  # Dev only - use JWT in production
     ports:
       - "5133:5133"
-      - "5433:5433"
     networks:
       - sertantai_network
     depends_on:
       postgres:
         condition: service_healthy
-
-  # Authorizing proxy for Electric
-  proxy:
-    build: ./proxy
-    environment:
-      ELECTRIC_URL: http://electric:5133
-      JWT_SECRET: ${GUARDIAN_SECRET_KEY}
-      JWT_ISSUER: sertantai_controls
-    ports:
-      - "3000:3000"
-    networks:
-      - sertantai_network
-    depends_on:
-      - electric
 
   # Phoenix backend
   backend:
@@ -561,7 +596,7 @@ services:
     build: ./frontend
     environment:
       PUBLIC_API_URL: http://localhost:4000
-      PUBLIC_ELECTRIC_PROXY_URL: http://localhost:3000
+      PUBLIC_ELECTRIC_URL: http://localhost:5133
     ports:
       - "5173:5173"
     volumes:
@@ -689,10 +724,11 @@ Backend services are added to `~/Desktop/infrastructure/docker/docker-compose.ym
 - Playwright
 - Testing Library (Svelte)
 
-**Code Quality**:
-- ESLint
-- Prettier
+**Code Quality** ✅:
+- ESLint (with @typescript-eslint, eslint-plugin-svelte)
+- Prettier (with prettier-plugin-svelte)
 - TypeScript strict mode
+- Vitest (testing framework with jsdom)
 
 ### Backend
 
@@ -719,10 +755,11 @@ Backend services are added to `~/Desktop/infrastructure/docker/docker-compose.ym
 - Guardian (JWT)
 - Argon2 (password hashing)
 
-**Code Quality**:
-- Credo
-- Dialyzer
-- ExCoveralls
+**Code Quality** ✅:
+- Credo (v1.7, configured for Ash Framework)
+- Dialyzer (v1.4, with PLT caching)
+- mix_audit (v2.1, security vulnerability scanning)
+- ExUnit (built-in testing)
 
 ### Backend CORS Configuration
 
@@ -840,14 +877,8 @@ end
                      │
                      ▼
 ┌─────────────────────────────────────────────────────┐
-│         Authorizing Proxy (JWT Validation)          │
-│    Validates shape-scoped tokens, forwards to       │
-│            Electric if authorized                   │
-└────────────────────┬────────────────────────────────┘
-                     │
-                     ▼
-┌─────────────────────────────────────────────────────┐
-│           ElectricSQL Sync Service                  │
+│      ElectricSQL v1.0 Sync Service (HTTP API)      │
+│    Built-in authentication via HTTP headers         │
 │         (Logical Replication Stream)                │
 └────────────────────┬────────────────────────────────┘
                      │
@@ -1675,7 +1706,7 @@ build: Build production artifacts
 ```bash
 # API Configuration
 PUBLIC_API_URL=http://localhost:4000
-PUBLIC_ELECTRIC_PROXY_URL=http://localhost:3000  # Authorizing proxy, not direct Electric
+PUBLIC_ELECTRIC_URL=http://localhost:5133  # ElectricSQL v1.0 HTTP Shape API
 
 # Environment
 PUBLIC_ENV=development
@@ -1702,19 +1733,13 @@ PORT=4000
 # CORS Configuration
 FRONTEND_URL=http://localhost:5173  # Dev: Vite server | Prod: CDN URL (e.g., https://app.example.com)
 
-# Electric
+# Electric v1.0
 ELECTRIC_URL=http://localhost:5133
-ELECTRIC_PROXY_URL=http://localhost:3000  # Public-facing proxy URL
 ELECTRIC_WRITE_TO_PG_MODE=direct_writes
 
-# Authentication
-GUARDIAN_SECRET_KEY=<generate-with-mix-guardian.gen.secret>
-GUARDIAN_ISSUER=sertantai_controls
-TOKEN_SIGNING_SECRET=<generate-secure-secret>
-
-# Shape Tokens
-SHAPE_TOKEN_TTL=3600  # 1 hour in seconds
-SHAPE_TOKEN_TYPE=Bearer
+# Authentication (for sertantai-auth JWT validation)
+SHARED_JWT_SECRET=<same-secret-as-sertantai-auth>
+GUARDIAN_ISSUER=sertantai_auth
 
 # Environment
 MIX_ENV=dev
@@ -1770,47 +1795,57 @@ MIX_ENV=dev
 
 ## Next Steps (Implementation Order)
 
-1. **Foundation**:
-   - [ ] Initialize Git repository
-   - [ ] Create directory structure
-   - [ ] Setup .gitignore files
-   - [ ] Create README.md with badges
+1. **Foundation** ✅ COMPLETE:
+   - [x] Initialize Git repository
+   - [x] Create directory structure
+   - [x] Setup .gitignore files
+   - [x] Create README.md
+   - [x] Configure Git hooks (pre-commit, pre-push)
+   - [x] Setup GitHub Actions CI/CD
+   - [x] Install quality tools (Credo, Dialyzer, ESLint, Prettier, Vitest)
+   - [x] First commit and push to GitHub
 
-2. **Backend Bootstrap**:
-   - [ ] Initialize Phoenix project with Ash
-   - [ ] Configure database connection to infrastructure postgres
-   - [ ] Add Plug.Cors dependency and configure CORS
-   - [ ] Setup AshAuthentication with password strategy
-   - [ ] Implement User resource with organization relationship
-   - [ ] Create gatekeeper controller for shape token generation
-   - [ ] Implement authorizing proxy (Phoenix Plug or Caddy)
-   - [ ] Setup Guardian for JWT management
-   - [ ] Setup ElectricSQL (connecting to infrastructure postgres)
+2. **Backend Bootstrap** (Partially Complete):
+   - [x] Initialize Phoenix project with Ash Framework 3.0
+   - [x] Setup Ash.Domain (SertantaiControls.Api)
+   - [x] Create database schema and migrations (8 resources)
+   - [x] Implement comprehensive seed data
+   - [x] Define read-only Auth resources (User, Organization)
+   - [x] Define Safety domain resources (Control, ControlProvider, ControlInteraction, etc.)
+   - [x] Configure Ecto.Repo with multi-tenancy support
+   - [x] Setup ExUnit testing framework
+   - [x] Configure database connection
+   - [x] Add Plug.Cors dependency and configure CORS
+   - [ ] Setup JWT validation for sertantai-auth tokens
+   - [x] Setup ElectricSQL v1.0 integration (Docker Compose configured, not running yet)
    - [ ] Create health check endpoint
-   - [ ] Setup testing framework
 
-3. **Frontend Bootstrap**:
-   - [ ] Initialize SvelteKit project
-   - [ ] Configure TypeScript
-   - [ ] Setup TailwindCSS
+3. **Frontend Bootstrap** (In Progress):
+   - [x] Initialize SvelteKit project (minimal template)
+   - [x] Configure TypeScript
+   - [x] Setup ESLint with TypeScript and Svelte plugins
+   - [x] Setup Prettier with Svelte plugin
+   - [x] Setup Vitest testing framework
+   - [x] Setup TailwindCSS v4 (with @tailwindcss/forms, @tailwindcss/typography)
    - [ ] Create auth store with token management
-   - [ ] Implement login/logout functionality
-   - [ ] Build shape token request logic
+   - [ ] Implement login redirect to sertantai-auth
    - [ ] Install and configure TanStack DB
    - [ ] Define initial collections structure
-   - [ ] Configure ElectricSQL client with auth
-   - [ ] Integrate TanStack DB with authenticated ElectricSQL sync
+   - [ ] Configure ElectricSQL v1.0 client
+   - [ ] Integrate TanStack DB with ElectricSQL sync
    - [ ] Implement token refresh mechanism
-   - [ ] Setup testing framework
 
-4. **DevOps Setup**:
-   - [ ] Create Docker configurations (PostgreSQL, Electric, Proxy, Backend, Frontend)
-   - [ ] Setup docker-compose.dev.yml (local development network)
+4. **DevOps Setup** (Mostly Complete):
+   - [x] Setup Git hooks (pre-commit with 7 checks, pre-push with 5 checks)
+   - [x] Configure GitHub Actions CI/CD (3 jobs: backend, frontend, integration)
+   - [x] Install and configure Credo, Dialyzer, mix_audit
+   - [x] Install and configure ESLint, Prettier, Vitest
+   - [x] Make hooks executable and test full commit/push cycle
+   - [x] Create Docker configurations (PostgreSQL, Electric v1.0, Backend, Frontend)
+   - [x] Setup docker-compose.dev.yml (local development network)
    - [ ] Create Makefile with development commands
-   - [ ] Configure CI/CD pipelines (separate backend + frontend deployments)
    - [ ] Setup frontend deployment to Cloudflare Pages/Netlify
-   - [ ] Configure CORS environment variables per environment
-   - [ ] Setup pre-commit hooks
+   - [x] Configure CORS environment variables per environment
    - [ ] Prepare production deployment configs for infrastructure project
 
 5. **Integration**:
@@ -1835,36 +1870,69 @@ MIX_ENV=dev
 
 ## Success Criteria
 
+**Phase 1: CI/CD & Quality** ✅ COMPLETE
+- [x] Git repository initialized and connected to GitHub
+- [x] Pre-commit hooks running (formatting, compilation, Credo, Ash codegen, ESLint, TypeScript)
+- [x] Pre-push hooks running (Dialyzer, security audit, tests)
+- [x] GitHub Actions CI/CD pipeline functional
+- [x] Backend quality tools configured (Credo, Dialyzer, mix_audit)
+- [x] Frontend quality tools configured (ESLint, Prettier, Vitest)
+- [x] First successful commit and push to remote
+
+**Phase 2: Database & Backend** (In Progress)
+- [x] Database schema defined (8 resources)
+- [x] Migrations created and tested
+- [x] Seed data comprehensive
+- [x] Ash resources defined with calculations and actions
 - [ ] All services start successfully with `make dev`
-- [ ] Gatekeeper authentication flow works end-to-end
-- [ ] Shape-scoped JWT tokens are properly validated
-- [ ] Unauthorized access attempts are correctly rejected
-- [ ] Token refresh mechanism works automatically
-- [ ] TanStack DB collections persist and sync correctly
+- [ ] Database connection configured
+- [ ] ElectricSQL v1.0 integration working
+- [ ] Health check endpoint functional
+- [ ] Backend tests passing
+
+**Phase 3: Frontend & Sync** (Not Started)
+- [ ] TanStack DB collections defined and persist correctly
+- [ ] ElectricSQL client configured with HTTP Shape API
 - [ ] Live queries update reactively with sub-ms performance
 - [ ] Optimistic mutations provide instant UI feedback
-- [ ] ElectricSQL bidirectional sync is functional
-- [ ] Multi-tenant data isolation is enforced
-- [ ] Tests run and pass in CI/CD pipeline
+- [ ] Bidirectional sync functional
+
+**Phase 4: Authentication** (Not Started)
+- [ ] JWT validation from sertantai-auth working
+- [ ] Multi-tenant data isolation enforced
+- [ ] Unauthorized access attempts correctly rejected
+- [ ] User/Organization data syncing from sertantai-auth
+
+**Phase 5: Polish & Production** (Not Started)
 - [ ] Hot reload works for both frontend and backend
-- [ ] Documentation is complete and accurate
+- [ ] Documentation complete and accurate
 - [ ] Security scans pass without critical issues
 - [ ] Code coverage meets 80% threshold
+- [ ] Production deployment configured
 
 ---
 
-**Last Updated**: 2025-11-13
-**Version**: 5.0
+**Last Updated**: 2025-11-14 (after first commit)
+**Version**: 6.0
 **Changes**:
 - v1.0: Initial blueprint
 - v2.0: Added TanStack DB clarification and Gatekeeper authentication
 - v3.0: Updated for infrastructure project integration, added CORS configuration, separated frontend deployment to CDN
 - v4.0: Clarified infrastructure is production-only; development uses local PostgreSQL in Docker Compose
-- **v5.0: MAJOR ARCHITECTURAL CHANGE - Centralized authentication via sertantai-auth app**
+- v5.0: MAJOR ARCHITECTURAL CHANGE - Centralized authentication via sertantai-auth app
   - Authentication now handled by separate `sertantai-auth` service
   - This app validates JWTs and syncs user/org data via ElectricSQL (read-only)
   - Shared database strategy across all sertantai-* apps
-  - Updated auth flow, JWT validation, and resource patterns
-  - Removed user/org/session management from this app's responsibilities
+- **v6.0: Updated to reflect actual implementation after first commit**
+  - ElectricSQL v1.0 HTTP Shape API (removed proxy architecture from v0.12.1)
+  - Ash Framework 3.0 with Ash.Domain (not Ash.Api)
+  - Comprehensive CI/CD with Git hooks (pre-commit: 7 checks, pre-push: 5 checks)
+  - GitHub Actions with 3 jobs (backend-checks, frontend-checks, integration-tests)
+  - Quality tools configured: Credo, Dialyzer, mix_audit, ESLint, Prettier, Vitest
+  - Backend: 8 resources defined, migrated, and seeded
+  - Frontend: SvelteKit minimal template with TypeScript and quality tools
+  - Updated directory structure to match actual Ash 3.0 patterns
+  - Updated Docker Compose to reflect ElectricSQL v1.0 (no proxy service)
+  - Updated success criteria with completion checkmarks
 
-**Status**: Foundation Implemented (Hello World + Electric + Proxy working), Schema Development in Progress
+**Status**: Phase 1 Complete - CI/CD & Quality Tools (15% complete). Backend schema and resources defined. Ready for local development environment setup.
