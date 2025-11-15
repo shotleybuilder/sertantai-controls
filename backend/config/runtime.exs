@@ -20,6 +20,16 @@ if System.get_env("PHX_SERVER") do
   config :sertantai_controls, SertantaiControlsWeb.Endpoint, server: true
 end
 
+# Authentication configuration (for sertantai-auth JWT validation)
+# CRITICAL: SHARED_TOKEN_SECRET must match the value in sertantai-auth
+config :sertantai_controls,
+  token_signing_secret: System.get_env("SHARED_TOKEN_SECRET")
+
+# Configure Joken default signer
+if shared_secret = System.get_env("SHARED_TOKEN_SECRET") do
+  config :joken, default_signer: shared_secret
+end
+
 if config_env() == :prod do
   # Production uses DATABASE_URL (standard for most hosting platforms)
   # Development uses SERTANTAI_DATABASE_URL to avoid conflicts

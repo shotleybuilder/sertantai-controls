@@ -15,7 +15,9 @@ else
     username: "postgres",
     password: "postgres",
     hostname: "localhost",
-    database: "sertantai_controls_dev",
+    # IMPORTANT: Shared database with sertantai-auth
+    # Both apps connect to same database for auth tables
+    database: "sertantai_auth_dev",
     stacktrace: true,
     show_sensitive_data_on_connection_error: true,
     pool_size: 10

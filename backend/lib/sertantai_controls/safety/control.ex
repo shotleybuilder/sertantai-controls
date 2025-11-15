@@ -12,6 +12,12 @@ defmodule SertantaiControls.Safety.Control do
     repo(SertantaiControls.Repo)
   end
 
+  # Multi-tenancy: Automatically scope all queries by organization_id
+  multitenancy do
+    strategy(:attribute)
+    attribute(:organization_id)
+  end
+
   attributes do
     uuid_primary_key(:id)
 

@@ -19,10 +19,17 @@ defmodule SertantaiControls.Auth.User do
       allow_nil?(false)
     end
 
-    attribute(:name, :string)
-
     attribute :organization_id, :uuid do
-      allow_nil?(false)
+      allow_nil?(true)
+    end
+
+    attribute :role, :atom do
+      allow_nil?(true)
+      constraints(one_of: [:owner, :admin, :member, :viewer])
+    end
+
+    attribute :confirmed_at, :utc_datetime_usec do
+      allow_nil?(true)
     end
 
     create_timestamp(:inserted_at)

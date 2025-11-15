@@ -44,6 +44,7 @@ defmodule SertantaiControls.MixProject do
       {:dns_cluster, "~> 0.1.1"},
       {:bandit, "~> 1.5"},
       {:corsica, "~> 2.1"},
+      {:joken, "~> 2.6"},
 
       # Ash Framework
       {:ash, "~> 3.0"},
